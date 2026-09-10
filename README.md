@@ -50,4 +50,3 @@ The tests exercise private-context isolation, role handoff, turn order, memory l
 Select this GitHub repository, the `main` branch, and `app.py`. No server key is required for Demo. Visitors can supply their own key for Live AI. The Python dependencies are pinned in `requirements.txt`; the 3D component is served by Streamlit.
 
 MIT licensed. Three.js r170 and its OrbitControls are vendored under their own MIT license in `office/vendor/THREE-LICENSE.txt`.
-

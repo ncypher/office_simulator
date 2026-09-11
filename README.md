@@ -29,7 +29,9 @@ On macOS/Linux use `.venv/bin/python` instead. Open the local URL printed by Str
 
 Drag the office to orbit, scroll to zoom, click a character to focus, or click **Home** to reset the camera. The conversation controls remain usable if WebGL is unavailable. Three.js is bundled locally so the office has no runtime CDN dependency.
 
-The office uses a dark indigo, plum, and teal palette with warm room lighting. New exchanges appear in a speech bubble above the active character's head. The bubble follows the character as you orbit and stays inside the view; long lines scroll within it and remain available in the transcript. **Pause / Resume** controls stay at the bottom; **Replay last turns** revisits up to three visible lines from the current scene without making API calls. Characters gesture while their line is playing, then settle. Mood labels and eyebrows reflect their fictional response. Reduced-motion system preferences suppress character animation.
+The office uses a dark indigo, plum, and teal palette with warm room lighting. A tiny symbol bubble follows the active speaker; full dialogue and gestures appear in subtitles below the scene. Long subtitles scroll and remain available in the transcript. **Sound off / on** enables optional synthesized cartoon mumbling with a different pitch for each character, without extra API calls. Sound starts only after a click. **Pause / Resume** and **Replay last turns** control up to three visible lines from the current scene. Characters gesture while their line is playing, then settle. Reduced-motion preferences suppress character animation.
+
+In Live AI mode, **Test AI connection** sends a small request to the selected model and displays success or a useful error. It may incur a small API charge; no story data is sent. Changing the key or model clears the previous result. Saved characters, relationships, seat changes, and restored stories display confirmation. Settings last for the Streamlit session; download a story to keep it for later. Credentials are never included in downloads.
 
 ## Live AI
 

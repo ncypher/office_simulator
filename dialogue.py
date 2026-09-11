@@ -19,6 +19,30 @@ def live_reply(state, speaker, audience, api_key, model):
             max_output_tokens=1400, store=False)
     return validate_reply(result.output_text)
 
+def check_connection(api_key, model):
+    """Exercise the same endpoint as dialogue without sending story data."""
+    from openai import OpenAI, AuthenticationError, PermissionDeniedError, NotFoundError, RateLimitError, APIConnectionError, APIStatusError
+    try:
+        with OpenAI(api_key=api_key, timeout=20, max_retries=0) as client:
+            result = client.responses.create(model=model, input="Reply with OK.",
+                                             max_output_tokens=64, store=False)
+        if result.status == "completed" and result.output_text.strip():
+            return True, "Connected — your key and selected model returned a response. Ready for live turns."
+        return False, "The API accepted the request but returned no complete text. Try another text model or test again."
+    except AuthenticationError:
+        return False, "Key not accepted. Check or replace your API key, then test again."
+    except (PermissionDeniedError, NotFoundError):
+        return False, "Model unavailable to this key. Check the model name and account access."
+    except RateLimitError:
+        return False, "Usage limit reached. Check API credits and rate limits, then test again."
+    except APIConnectionError:
+        return False, "Could not reach OpenAI. Check the connection and try again."
+    except APIStatusError:
+        return False, "The API could not complete this test. Check the model or try again shortly."
+    except Exception:
+        return False, "Connection test failed. Check your settings and try again."
+
+
 def validate_reply(raw):
     data = json.loads(raw)
     if not isinstance(data, dict) or not isinstance(data.get("text"), str) or not data["text"].strip():

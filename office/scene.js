@@ -9,10 +9,10 @@ window.addEventListener('message', event => {
   if (event.source !== window.parent || event.data?.type !== 'streamlit:render') return;
   state=event.data.args;
   applyState();
-  send('streamlit:setFrameHeight', {height:stage.clientHeight});
+  send('streamlit:setFrameHeight', {height:document.body.scrollHeight});
 });
 send('streamlit:componentReady', {apiVersion:1});
-send('streamlit:setFrameHeight', {height:stage.clientHeight});
+send('streamlit:setFrameHeight', {height:document.body.scrollHeight});
 
 try {
   const scene = new THREE.Scene();
@@ -104,12 +104,38 @@ try {
   person(0,0,-1.35,0);person(1,-2,.35,Math.PI/2);person(2,1.95,.55,-Math.PI/2);
   let displayedLine=null, talkingUntil=0, timer=null, queue=[], beat=0, paused=false, signature='',lastSeen=-1,seat='';
   const replay=document.querySelector('#replay'),pause=document.querySelector('#pause'),bubble=document.querySelector('#bubble');
+  let audio=null, soundOn=false, nextSyllable=0;
+  const sound=document.querySelector('#sound');
+  sound.addEventListener('click',async()=>{
+    try{
+      audio ||= new (window.AudioContext||window.webkitAudioContext)();
+      soundOn=!soundOn;
+      if(soundOn)await audio.resume();else await audio.suspend();
+      sound.textContent=soundOn?'Sound on':'Sound off';
+      sound.setAttribute('aria-pressed',String(soundOn));
+    }catch{soundOn=false;sound.textContent='Sound unavailable';}
+  });
+  function mumble(index){
+    if(!soundOn||!audio||audio.state!=='running'||document.hidden)return;
+    const now=audio.currentTime;
+    if(now<nextSyllable)return;
+    nextSyllable=now+.18+Math.random()*.16;
+    const osc=audio.createOscillator(),filter=audio.createBiquadFilter(),gain=audio.createGain();
+    osc.type='sawtooth';osc.frequency.setValueAtTime([115,155,135][index]*(.9+Math.random()*.2),now);
+    filter.type='bandpass';filter.Q.value=3;filter.frequency.setValueAtTime(450,now);filter.frequency.exponentialRampToValueAtTime(950,now+.08);filter.frequency.exponentialRampToValueAtTime(350,now+.18);
+    gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(.035,now+.025);gain.gain.linearRampToValueAtTime(0,now+.2);
+    osc.connect(filter);filter.connect(gain);gain.connect(audio.destination);osc.start(now);osc.stop(now+.21);
+    osc.onended=()=>{osc.disconnect();filter.disconnect();gain.disconnect();};
+  }
   function showLine(line){
     displayedLine=line;
     talkingUntil=performance.now()+Math.min(9000,Math.max(3500,(line?.text.length||0)*35));
     const c=state.cast.find(c=>c.id===line?.speaker);
     bubble.classList.toggle('idle',!c);
     bubble.dataset.speaker=c?.id||'';
+    bubble.setAttribute('aria-label',c?`${line.name} is the current speaker`:'No current speaker');
+    bubble.textContent=line?.emotion==='tense'?'! !':line?.emotion==='thoughtful'?'…':'•••';
+    document.querySelector('#action').textContent=line?.action||'';
     bubble.style.setProperty('--voice',c?.color||'#a99be4');
     people.forEach((p,i)=>{
       const speaking=line?.speaker===state.cast[i].id;
@@ -122,6 +148,7 @@ try {
     document.querySelector('#speaker').style.color=c?.color||'#d8ceff';
     document.querySelector('#quote').textContent=line?.text||'Three coffees. One conversation waiting to happen.';
     document.querySelector('#quote').scrollTop=0;
+    requestAnimationFrame(()=>send('streamlit:setFrameHeight',{height:document.body.scrollHeight}));
   }
   function schedule(){
     clearTimeout(timer);
@@ -160,7 +187,7 @@ try {
     const rect=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(pointer,camera);
     const hit=ray.intersectObjects(people.map(p=>p.root),true)[0];if(hit){const p=people[hit.object.userData.character];controls.target.set(p.root.position.x,1,p.root.position.z);}
   });
-  function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();send('streamlit:setFrameHeight',{height:h});}
+  function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();send('streamlit:setFrameHeight',{height:document.body.scrollHeight});}
   new ResizeObserver(resize).observe(stage);resize();
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const clock=new THREE.Clock(),position=new THREE.Vector3(),headPosition=new THREE.Vector3();
@@ -183,6 +210,7 @@ try {
     people.forEach(p=>{
       const active=displayedLine?.speaker===state.cast[p.index].id;
       const talking=active&&!paused&&performance.now()<talkingUntil;
+      if(talking)mumble(p.index);
       if(!reduced.matches){
         p.body.position.y=Math.sin(t*1.8+p.index)*.015;
         p.head.rotation.z=Math.sin(t*1.2+p.index)*.035;

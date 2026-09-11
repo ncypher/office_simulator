@@ -1,12 +1,13 @@
 from pathlib import Path
 import html
 import os
+from datetime import datetime
 import streamlit as st
 import streamlit.components.v1 as components
 from engine import (fresh_state, SCENARIOS, add_event, add_line, audience_for,
                     next_speaker, character, demo_reply, export_state,
                     remembered_moments, bond_label, next_episode)
-from dialogue import live_reply
+from dialogue import live_reply, check_connection
 from saves import import_state
 
 ROOT = Path(__file__).parent
@@ -40,25 +41,43 @@ if "world" not in st.session_state:
 state = st.session_state.world
 esc = html.escape
 
+def confirmed(message):
+    st.session_state.settings_receipt = f"{message} · {datetime.now().strftime('%H:%M:%S')}"
+
+def clear_connection():
+    st.session_state.pop("connection_result", None)
+
 with st.sidebar:
     st.markdown("### 🪴 The director’s chair")
-    mode = st.radio("Dialogue", ["Demo · no key needed", "Live AI"], key="mode")
+    mode = st.radio("Dialogue", ["Demo · no key needed", "Live AI"], key="mode", on_change=lambda: confirmed("Dialogue mode applied"))
     api_key = ""
     model = "gpt-4.1-mini"
     if mode == "Live AI":
-        api_key = st.text_input("OpenAI API key", type="password", key="api_key") or os.getenv("OPENAI_API_KEY", "")
-        model = st.text_input("Model", value="gpt-4.1-mini", help="Use a text model available to your API account.")
+        api_key = st.text_input("OpenAI API key", type="password", key="api_key", on_change=clear_connection) or os.getenv("OPENAI_API_KEY", "")
+        model = st.text_input("Model", value="gpt-4.1-mini", help="Use a text model available to your API account.", key="model", on_change=clear_connection)
         st.caption("Key stays in this server session. Live turns send character context and visible dialogue to OpenAI. API usage is billed to your account.")
+        if st.button("Test AI connection", disabled=not api_key.strip() or not model.strip()):
+            with st.spinner("Checking your key and model…"):
+                st.session_state.connection_result = check_connection(api_key.strip(), model.strip())
+        result = st.session_state.get("connection_result")
+        if result:
+            (st.success if result[0] else st.error)(result[1])
+        else:
+            st.info("Connection not tested. Test after entering or changing your key or model.")
+        st.caption("The test sends one tiny request using the selected model; a small API charge may apply. No story details are sent.")
     else:
         st.caption("Scripted dialogue. Warmth and assertiveness affect delivery; live AI uses the full character description.")
+    st.caption("Settings and story stay in this browser session. Download a session to keep characters, relationships, and story for later; API credentials are never included.")
+    if "settings_receipt" in st.session_state:
+        st.success(st.session_state.settings_receipt)
     st.divider()
     ids = [c["id"] for c in state["cast"]]
     labels = {"observer": "Observe the scene", **{c["id"]: f'Play {c["name"]} · {c["role"]}' for c in state["cast"]}}
-    human = st.selectbox("Your seat", ["observer"] + ids, format_func=labels.get, key="human")
+    human = st.selectbox("Your seat", ["observer"] + ids, format_func=labels.get, key="human", on_change=lambda: confirmed("Your seat is applied"))
     recipient = "everyone"
     if human != "observer":
         recipient = st.selectbox("Who can hear you?", ["everyone"] + [i for i in ids if i != human],
-            format_func=lambda i: "Everyone at the table" if i == "everyone" else f'Only {character(state, i)["name"]}', key=f"recipient_{human}")
+            format_func=lambda i: "Everyone at the table" if i == "everyone" else f'Only {character(state, i)["name"]}', key=f"recipient_{human}", on_change=lambda: confirmed("Audience selection applied"))
     st.divider()
     with st.expander("AI settings & session"):
         st.caption("Each click runs at most 3 AI turns. Nothing runs in the background. Characters receive recent exchanges plus important moments from their office history.")
@@ -70,10 +89,12 @@ with st.sidebar:
         if uploaded is not None and st.button("Resume this story"):
             try:
                 st.session_state.pending_restore = import_state(uploaded.getvalue())
+                confirmed("Saved story restored")
                 st.rerun()
             except ValueError as exc:
                 st.error(str(exc))
         if st.button("Start a fresh session"):
+            confirmed("Fresh session started")
             st.session_state.world = fresh_state()
             add_event(st.session_state.world, SCENARIOS["The credit mix-up"])
             for key in list(st.session_state):
@@ -107,6 +128,7 @@ with cast_tab:
         if st.form_submit_button("Save characters", type="primary"):
             if all(c["name"].strip() for c in changes):
                 state["cast"] = changes
+                confirmed("Characters saved — future turns use these details")
                 st.rerun()
             else:
                 st.error("Give each character a name.")
@@ -121,6 +143,7 @@ with cast_tab:
                     state["trust"][c["id"]][other["id"]], key=f'trust_{c["id"]}_{other["id"]}') for other in state["cast"] if other != c}
         if st.form_submit_button("Set relationships"):
             state["trust"] = relationship_values
+            confirmed("Relationships saved")
             st.rerun()
 
 with history_tab:

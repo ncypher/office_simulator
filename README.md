@@ -2,6 +2,12 @@
 
 Three people. One very small office. A Streamlit workplace drama with an interactive Three.js diorama, configurable characters, and optional AI dialogue.
 
+**[Play Office Hours](https://office-simulator.streamlit.app/)** · [More Streamlit worlds](https://github.com/ncypher/ncypher#start-with-something-you-can-touch) · [Conversational Artifacts](https://ncypher.github.io/tomfoolery/#collection)
+
+Related community project: [Project reoWren](https://www.patreon.com/cw/ProjectreoWren), an experimental approach to community-owned reporting and radio-mesh communication.
+
+Related community project: [Project reoWren](https://www.patreon.com/cw/ProjectreoWren), an experimental approach to community-owned reporting and radio-mesh communication.
+
 ## Play
 
 Requires Python 3.11 or newer.
@@ -24,7 +30,7 @@ On macOS/Linux use `.venv/bin/python` instead. Open the local URL printed by Str
 
 Drag the office to orbit, scroll to zoom, click a character to focus, or click **Home** to reset the camera. The conversation controls remain usable if WebGL is unavailable. Three.js is bundled locally so the office has no runtime CDN dependency.
 
-The office uses a dark indigo, plum, and teal palette with warm room lighting. New exchanges play one at a time in the stage bubble. **Pause / Resume** controls playback; **Replay last turns** revisits up to three visible lines from the current scene without making API calls. Characters gesture while their line is playing, then settle. Mood labels and eyebrows reflect their fictional response. Reduced-motion system preferences suppress character animation.
+The office uses a dark indigo, plum, and teal palette with warm room lighting. New exchanges appear in a speech bubble above the active character's head. The bubble follows the character as you orbit and stays inside the view; long lines scroll within it and remain available in the transcript. **Pause / Resume** controls stay at the bottom; **Replay last turns** revisits up to three visible lines from the current scene without making API calls. Characters gesture while their line is playing, then settle. Mood labels and eyebrows reflect their fictional response. Reduced-motion system preferences suppress character animation.
 
 ## Live AI
 

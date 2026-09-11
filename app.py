@@ -239,3 +239,7 @@ with play:
                         st.rerun()
                     else:
                         st.error("Write something to say or do.")
+
+st.caption("[More Streamlit worlds](https://github.com/ncypher/ncypher#start-with-something-you-can-touch) · [Project reoWren on Patreon](https://www.patreon.com/cw/ProjectreoWren)")
+
+st.caption("[More Streamlit worlds](https://github.com/ncypher/ncypher#start-with-something-you-can-touch) · [Project reoWren on Patreon](https://www.patreon.com/cw/ProjectreoWren)")

@@ -9,17 +9,20 @@ canvas{display:block;width:100%;height:100%;touch-action:none}#hud{position:abso
 .pill{display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#191c32ec;border:1px solid #555171;border-radius:30px;padding:7px 12px;font-size:12px;letter-spacing:.06em;font-weight:700;color:#d8ceff}
 #home,.playback button{border:1px solid #555171;background:#252840;border-radius:20px;padding:7px 12px;color:#edf0ff;cursor:pointer;font:inherit;font-size:13px}
 #home{position:absolute;top:17px;right:17px}button:hover{background:#49415f!important}button:focus-visible{outline:3px solid #c7b7ff;outline-offset:2px}button:disabled{opacity:.45;cursor:default}
-.playback{display:flex;align-items:center;gap:8px;margin-top:10px}.playback span{font-size:12px;color:#b8bdd7;margin-left:auto}
-#bubble{position:absolute;bottom:14px;left:14px;right:14px;border:1px solid #555171;background:#191c32f5;border-radius:14px;padding:12px 16px;box-shadow:0 5px 24px #0004;max-height:170px;overflow:auto;pointer-events:auto}
-#bubble strong{font-size:14px;filter:brightness(1.4)}#quote{margin-top:4px;font-size:14px}.tag{position:absolute;transform:translate(-50%,-50%);background:#20243aee;color:#f1efff;border-radius:20px;padding:5px 10px;white-space:nowrap;font-size:12px;pointer-events:none;border:2px solid transparent}
+.playback{position:absolute;bottom:12px;left:12px;right:12px;z-index:5;display:flex;align-items:center;gap:8px;padding:8px 10px;background:#191c32ed;border:1px solid #45435e;border-radius:14px}.playback span{font-size:12px;color:#b8bdd7;margin-left:auto}
+#bubble{position:absolute;top:64px;left:12px;width:min(300px,calc(100% - 24px));z-index:4;border:1px solid var(--voice,#a99be4);background:#191c32f5;border-radius:16px;padding:10px 13px;box-shadow:0 5px 24px #0004;pointer-events:auto}
+#bubble::after{content:"";position:absolute;left:var(--tail-x,50%);bottom:-7px;width:12px;height:12px;background:#191c32;border-right:1px solid var(--voice,#a99be4);border-bottom:1px solid var(--voice,#a99be4);transform:translateX(-50%) rotate(45deg)}
+#bubble.idle::after{display:none}
+#bubble strong{font-size:14px;filter:brightness(1.4)}#quote{margin-top:4px;font-size:14px;max-height:104px;overflow:auto;overflow-wrap:anywhere;scrollbar-width:thin}.tag{position:absolute;transform:translate(-50%,-50%);background:#20243aee;color:#f1efff;border-radius:20px;padding:5px 10px;white-space:nowrap;font-size:12px;pointer-events:none;border:2px solid transparent}
 #error{position:absolute;inset:100px 25px auto;background:#20243a;padding:20px;border-radius:16px;display:none}
-@media(max-width:480px){#stage{height:370px}#bubble{bottom:10px;left:10px;right:10px}.tag{font-size:12px}#hud{left:10px}}
+@media(max-width:480px){#stage{height:420px}#quote{max-height:90px}.tag{font-size:12px}#hud{left:10px}.playback{gap:6px;padding:8px}.playback button{padding:7px 9px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
 </style></head><body>
-<div id="stage" role="img" aria-label="Interactive miniature office with three characters around a meeting table">
+<div id="stage" role="group" aria-label="Interactive miniature office with three characters around a meeting table">
 <div id="hud"><span class="pill" id="room">CONFERENCE ROOM 01</span></div>
 <button id="home" aria-label="Reset camera view">Home ↺</button>
-<div id="bubble"><div aria-live="polite"><strong id="speaker">The room is yours.</strong><div id="quote">Three coffees. One conversation waiting to happen.</div></div><div class="playback"><button id="replay" disabled>Replay last turns</button><button id="pause" disabled>Pause</button><span id="beat">Waiting for a turn</span></div></div>
+<div id="bubble" class="idle"><div aria-live="polite"><strong id="speaker">The room is yours.</strong><div id="quote" tabindex="0" aria-label="Current dialogue">Three coffees. One conversation waiting to happen.</div></div></div>
+<div class="playback"><button id="replay" disabled>Replay last turns</button><button id="pause" disabled>Pause</button><span id="beat">Waiting for a turn</span></div>
 <div id="error">The 3D view couldn’t start on this device. You can still play using the conversation controls.</div>
 </div>
 <script type="module" src="./scene.js"></script></body></html>

@@ -103,11 +103,14 @@ try {
   }
   person(0,0,-1.35,0);person(1,-2,.35,Math.PI/2);person(2,1.95,.55,-Math.PI/2);
   let displayedLine=null, talkingUntil=0, timer=null, queue=[], beat=0, paused=false, signature='',lastSeen=-1,seat='';
-  const replay=document.querySelector('#replay'),pause=document.querySelector('#pause');
+  const replay=document.querySelector('#replay'),pause=document.querySelector('#pause'),bubble=document.querySelector('#bubble');
   function showLine(line){
     displayedLine=line;
     talkingUntil=performance.now()+Math.min(9000,Math.max(3500,(line?.text.length||0)*35));
     const c=state.cast.find(c=>c.id===line?.speaker);
+    bubble.classList.toggle('idle',!c);
+    bubble.dataset.speaker=c?.id||'';
+    bubble.style.setProperty('--voice',c?.color||'#a99be4');
     people.forEach((p,i)=>{
       const speaking=line?.speaker===state.cast[i].id;
       p.label.textContent=state.cast[i].name+(state.human===state.cast[i].id?' · You':'')+(speaking?` · ${line.emotion||'neutral'}`:'');
@@ -118,6 +121,7 @@ try {
     document.querySelector('#speaker').textContent=c?`${line.name} ${line.audience?.length===2?'· Private exchange':''}`:'The room is yours.';
     document.querySelector('#speaker').style.color=c?.color||'#d8ceff';
     document.querySelector('#quote').textContent=line?.text||'Three coffees. One conversation waiting to happen.';
+    document.querySelector('#quote').scrollTop=0;
   }
   function schedule(){
     clearTimeout(timer);
@@ -159,9 +163,23 @@ try {
   function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();send('streamlit:setFrameHeight',{height:h});}
   new ResizeObserver(resize).observe(stage);resize();
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
-  const clock=new THREE.Clock(),position=new THREE.Vector3();
+  const clock=new THREE.Clock(),position=new THREE.Vector3(),headPosition=new THREE.Vector3();
   renderer.setAnimationLoop(()=>{
     const t=clock.getElapsedTime();
+    controls.update();camera.updateMatrixWorld();
+    const speaking=people.find(p=>displayedLine?.speaker===state.cast[p.index].id);
+    if(speaking){
+      speaking.head.getWorldPosition(headPosition);headPosition.y+=.45;headPosition.project(camera);
+      const headX=(headPosition.x*.5+.5)*stage.clientWidth;
+      const headY=(-headPosition.y*.5+.5)*stage.clientHeight;
+      const width=bubble.offsetWidth,height=bubble.offsetHeight;
+      const left=Math.max(12,Math.min(headX-width/2,stage.clientWidth-width-12));
+      const top=Math.max(58,Math.min(headY-height-18,stage.clientHeight-height-78));
+      bubble.style.left=`${left}px`;bubble.style.top=`${top}px`;
+      bubble.style.setProperty('--tail-x',`${Math.max(16,Math.min(width-16,headX-left))}px`);
+    }else{
+      bubble.style.left=`${(stage.clientWidth-bubble.offsetWidth)/2}px`;bubble.style.top='64px';
+    }
     people.forEach(p=>{
       const active=displayedLine?.speaker===state.cast[p.index].id;
       const talking=active&&!paused&&performance.now()<talkingUntil;
@@ -175,7 +193,10 @@ try {
       }else{p.body.position.y=0;p.head.rotation.set(0,0,0);p.arms.forEach(a=>a.rotation.set(0,0,0));p.mouth.scale.y=1;}
       p.ring.visible=active||state.human===state.cast[p.index].id;
       position.copy(p.root.position);position.y=2.5;position.project(camera);p.label.style.left=`${(position.x*.5+.5)*stage.clientWidth}px`;p.label.style.top=`${(-position.y*.5+.5)*stage.clientHeight}px`;
+      const labelX=(position.x*.5+.5)*stage.clientWidth,labelY=(-position.y*.5+.5)*stage.clientHeight;
+      const bx=parseFloat(bubble.style.left),by=parseFloat(bubble.style.top);
+      p.label.style.visibility=active||(labelX>bx-35&&labelX<bx+bubble.offsetWidth+35&&labelY>by-14&&labelY<by+bubble.offsetHeight+14)?'hidden':'visible';
     });
-    controls.update();renderer.render(scene,camera);
+    renderer.render(scene,camera);
   });
 }catch(error){document.querySelector('#error').style.display='block';console.error('Office scene failed',error);}

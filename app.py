@@ -242,4 +242,3 @@ with play:
 
 st.caption("[More Streamlit worlds](https://github.com/ncypher/ncypher#start-with-something-you-can-touch) · [Project reoWren on Patreon](https://www.patreon.com/cw/ProjectreoWren)")
 
-st.caption("[More Streamlit worlds](https://github.com/ncypher/ncypher#start-with-something-you-can-touch) · [Project reoWren on Patreon](https://www.patreon.com/cw/ProjectreoWren)")

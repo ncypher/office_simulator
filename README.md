@@ -6,7 +6,6 @@ Three people. One very small office. A Streamlit workplace drama with an interac
 
 Related community project: [Project reoWren](https://www.patreon.com/cw/ProjectreoWren), an experimental approach to community-owned reporting and radio-mesh communication.
 
-Related community project: [Project reoWren](https://www.patreon.com/cw/ProjectreoWren), an experimental approach to community-owned reporting and radio-mesh communication.
 
 ## Play
 

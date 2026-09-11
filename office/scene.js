@@ -137,7 +137,7 @@ try {
   applyState=()=>{
     document.querySelector('#room').textContent=`CONFERENCE ROOM · SCENE ${String(state.scene).padStart(2,'0')}`;
     const lines=state.lines||[];
-    const nextSignature=JSON.stringify([state.human,state.scene,lines.map(l=>l.playback_id)]);
+    const nextSignature=JSON.stringify([state.story_revision,state.human,state.scene,lines.map(l=>l.playback_id)]);
     replay.disabled=lines.length===0;
     if(nextSignature!==signature){
       const newSeat=`${state.human}:${state.scene}`;

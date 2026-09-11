@@ -26,6 +26,7 @@ class AppWorkflowTests(unittest.TestCase):
         app.selectbox(key="human").select("boss").run()
         self.assertNotIn("PRIVATE TEST MESSAGE"," ".join(x.value for x in app.markdown))
         self.assertNotIn("PRIVATE TEST MESSAGE",app.get("component_instance")[0].proto.json_args)
+        self.assertNotIn("PRIVATE TEST MESSAGE"," ".join(x.value for x in app.text))
         app.selectbox(key="human").select("observer").run()
         self.assertFalse(self.button(app,"Next turn").disabled)
         self.assertEqual(len(app.exception),0)

@@ -67,7 +67,50 @@ def context_for(state, speaker, audience):
     own = character(state, speaker)
     visible = [e for e in state["log"] if speaker in e["audience"]][-40:]
     return dict(character=own, colleagues=[{k: c[k] for k in ("id", "name", "role")} for c in state["cast"] if c["id"] != speaker],
-                your_trust=state["trust"][speaker], present=audience, memories=visible)
+                your_trust=state["trust"][speaker], present=audience, memories=visible,
+                office_history=remembered_moments(state, speaker))
+
+def remembered_moments(state, identity):
+    """Keep an early defining moment plus recent salient moments beyond the turn window.
+
+    Derived from actual dialogue so save files cannot inject an independent memory ledger.
+    Only the character's witnessed exchanges qualify; one moment per scene and speaker.
+    """
+    moments = {}
+    for i, e in enumerate(state["log"]):
+        if (e["kind"] != "line" or identity not in e["audience"] or
+                e.get("stance", "neutral") == "neutral" or e["speaker"] == identity):
+            continue
+        moments[(e["scene"], e["speaker"])] = dict(
+            scene=e["scene"], speaker=e["speaker"], name=e["name"], text=e["text"][:240],
+            stance=e["stance"], audience=list(e["audience"]), source_index=i)
+    ordered = sorted(moments.values(), key=lambda e: e["source_index"])
+    return ordered if len(ordered) <= 8 else [ordered[0]] + ordered[-7:]
+
+def bond_label(score):
+    return "An ally" if score >= 65 else "Warming up" if score >= 55 else "Finding their footing" if score >= 45 else "Walking on eggshells" if score >= 30 else "A grudge is forming"
+
+def next_episode(state):
+    """A local director chooses an event; characters still decide how to respond."""
+    pairs = [(score, a, b) for a, values in state["trust"].items() for b, score in values.items()]
+    low, a, b = min(pairs)
+    high, ally, partner = max(pairs)
+    name = lambda who: character(state, who)["name"]
+    beat = state["scene"] % 4
+    if beat == 1:
+        return (f"{name(a)} and {name(b)} have been assigned a joint proposal. There is only one presenter slot. "
+                "They must agree who will present and how everyone's contribution will be credited.")
+    if beat == 2 and low < 45:
+        return (f"{name(a)} asks for a written decision log before starting another assignment with {name(b)}. "
+                "The boss has ten minutes before a leadership meeting. Everyone must decide what to put on the record.")
+    if beat == 2:
+        return "A client offers the team a high-profile project, but accepting it means dropping a commitment to another department. The boss asks for an honest recommendation."
+    if beat == 3 and high >= 55:
+        return (f"{name(ally)} can nominate one colleague for a development opportunity. {name(partner)} is eligible, "
+                "but the nomination must explain the actual contribution. The team discusses who should go.")
+    if beat == 3:
+        return "The team receives an unexpected thank-you from a client. It names nobody. Each person is asked to recognize one specific thing a colleague did."
+    return "The office has one quiet afternoon with no urgent deadline. The boss suggests a reset: one thing to keep, one thing to change, and one commitment for the next week."
 
 def demo_reply(state, speaker, audience):
     """Deliberately scripted; structured traits influence delivery, not arbitrary prose."""
@@ -81,6 +124,7 @@ def demo_reply(state, speaker, audience):
         lines = ["Between us, that meeting landed differently than I expected. What do you need from me?",
                  "I can have that conversation with you here. Let's agree what we're comfortable saying to the room.",
                  "I'd rather we said it clearly to each other before this turns into another awkward meeting."]
+        deliveries = ["support", "neutral", "support"]
     elif "credit" in event.lower() or "presentation" in event.lower():
         lines = {
             "boss": [f"Before we start: fantastic presentation, {a}. That's the kind of ownership I love to see.",
@@ -92,6 +136,8 @@ def demo_reply(state, speaker, audience):
             "sam": ["By 'heavy lifting', do we mean the slides, the analysis, or the part where it became Thursday at midnight?",
                     "I don't need a parade. I would like my name on my work.",
                     "Thank you. Next time, could we establish who did what before the applause?"]}[speaker]
+        deliveries = {"boss":["deflect","deflect","support"], "alex":["support"]*3,
+                      "sam":["challenge","challenge","support"]}[speaker]
     else:
         subject = event[:180]
         lines = {
@@ -104,14 +150,35 @@ def demo_reply(state, speaker, audience):
             "sam": ["Can we name the actual problem before we volunteer someone else's time?",
                     "I'd like a clear boundary here, and a decision we can refer back to.",
                     "That's a start. Let's see if the follow-through matches the meeting."]}[speaker]
+        deliveries = {"boss":["neutral","neutral","support"], "alex":["support","challenge","neutral"],
+                      "sam":["challenge","challenge","neutral"]}[speaker]
     text = lines[n % len(lines)]
+    if n == 0 and state["scene"] > 1:
+        echoes = [m for m in remembered_moments(state, speaker) if m["scene"] < state["scene"]
+                  and set(audience).issubset(m["audience"])]
+        if echoes:
+            m = echoes[-1]
+            framing = "I appreciated" if m["stance"] == "support" else "I'm still thinking about"
+            excerpt = m["text"][:110] + ("…" if len(m["text"]) > 110 else "")
+            text = f'{framing} what {m["name"]} said earlier: “{excerpt}”. ' + text
+        lowest = min(state["trust"][speaker].values())
+        if lowest < 45:
+            text += " I'd like the agreement written down this time."
+        elif max(state["trust"][speaker].values()) >= 65:
+            text += " We've built some trust. I'd like to keep it."
     if prior and prior[-1].get("source") == "human":
         text = f'On what you just said—“{prior[-1]["text"][:100]}”—' + text[0].lower() + text[1:]
-    stance = "support" if c["warmth"] >= 7 else "challenge" if c["assertiveness"] >= 6 else "neutral"
+    stance = deliveries[n % len(deliveries)]
+    if c["warmth"] >= 8 and stance == "challenge":
+        text = "I want this to work for all of us. " + text
     if c["assertiveness"] <= 3:
         text = "I might be missing something, but " + text[0].lower() + text[1:]
     return dict(text=text, stance=stance, emotion={"support": "warm", "challenge": "tense"}.get(stance, "thoughtful"),
                 action={"boss": "Sets the coffee mug down.", "alex": "Glances around the table.", "sam": "Closes the notebook."}[speaker])
 
 def export_state(state):
-    return json.dumps(state, indent=2, ensure_ascii=False)
+    from saves import clean_state, MAX_BYTES
+    payload = json.dumps(dict(clean_state(state), version=1), indent=2, ensure_ascii=False)
+    if len(payload.encode("utf-8")) > MAX_BYTES:
+        raise ValueError("This story exceeds the 5 MB save limit.")
+    return payload

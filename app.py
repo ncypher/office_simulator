@@ -4,14 +4,16 @@ import os
 import streamlit as st
 import streamlit.components.v1 as components
 from engine import (fresh_state, SCENARIOS, add_event, add_line, audience_for,
-                    next_speaker, character, demo_reply, export_state)
+                    next_speaker, character, demo_reply, export_state,
+                    remembered_moments, bond_label, next_episode)
 from dialogue import live_reply
+from saves import import_state
 
 ROOT = Path(__file__).parent
 office = components.declare_component("little_office", path=str(ROOT / "office"))
 st.set_page_config(page_title="Office Hours · A tiny workplace drama", page_icon="🪴", layout="wide")
 st.markdown('''<style>
-.block-container{padding-top:1.7rem;padding-bottom:2rem;max-width:1560px}
+.block-container{padding:4rem 1.5rem 2rem;max-width:1560px}
 h1{font-size:2.5rem!important;letter-spacing:-.08rem} h3{font-size:1.2rem!important}
 [data-testid="stAppViewContainer"]{background:radial-gradient(ellipse at 75% 0%,#30225280,transparent 52%),radial-gradient(ellipse at 0% 90%,#12383d60,transparent 50%),#111426;color:#edf0ff}
 [data-testid="stHeader"]{background:#111426e8}
@@ -23,8 +25,15 @@ h1{font-size:2.5rem!important;letter-spacing:-.08rem} h3{font-size:1.2rem!import
 .line .meta{font-size:.85rem;color:#b4b9d3}.line p{margin:6px 0 0;line-height:1.5}
 .castcard{border-top:4px solid var(--accent);background:linear-gradient(140deg,#292d46,#1c2035);color:#edf0ff;padding:14px;border-radius:10px;margin-bottom:12px;box-shadow:0 6px 24px #0002}
 .castcard strong{font-size:1.1rem}.castcard span{color:#b4b9d3;font-size:.85rem}
+@media(max-width:1100px){[data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"]{flex-wrap:wrap}[data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]{width:100%!important;flex:1 1 100%!important;min-width:0!important}}
 </style>''', unsafe_allow_html=True)
 
+if "pending_restore" in st.session_state:
+    st.session_state.world = st.session_state.pop("pending_restore")
+    st.session_state.story_revision = st.session_state.get("story_revision", 0) + 1
+    for key in list(st.session_state):
+        if key.startswith(("cast_", "trust_", "recipient_", "event_")) or key in ("human", "turn_error"):
+            del st.session_state[key]
 if "world" not in st.session_state:
     st.session_state.world = fresh_state()
     add_event(st.session_state.world, SCENARIOS["The credit mix-up"])
@@ -52,8 +61,18 @@ with st.sidebar:
             format_func=lambda i: "Everyone at the table" if i == "everyone" else f'Only {character(state, i)["name"]}', key=f"recipient_{human}")
     st.divider()
     with st.expander("AI settings & session"):
-        st.caption("Each click runs at most 3 AI turns. Nothing runs in the background. The latest 40 exchanges visible to each character inform its next response.")
-        st.download_button("Download session", export_state(state), "office-hours.json", "application/json")
+        st.caption("Each click runs at most 3 AI turns. Nothing runs in the background. Characters receive recent exchanges plus important moments from their office history.")
+        try:
+            st.download_button("Download session", export_state(state), "office-hours.json", "application/json")
+        except ValueError as exc:
+            st.warning(str(exc))
+        uploaded = st.file_uploader("Resume a saved story", type=["json"], help="Choose a downloaded Office Hours session. Your current story is replaced only when you click Resume.")
+        if uploaded is not None and st.button("Resume this story"):
+            try:
+                st.session_state.pending_restore = import_state(uploaded.getvalue())
+                st.rerun()
+            except ValueError as exc:
+                st.error(str(exc))
         if st.button("Start a fresh session"):
             st.session_state.world = fresh_state()
             add_event(st.session_state.world, SCENARIOS["The credit mix-up"])
@@ -69,7 +88,7 @@ with head:
 with badge:
     st.caption(f'SCENE {state["scene"]:02d}  /  {"LIVE AI" if mode == "Live AI" else "DEMO"}')
 
-play, cast_tab = st.tabs(["The office", "Meet the cast"])
+play, cast_tab, history_tab = st.tabs(["The office", "Meet the cast", "Office history"])
 with cast_tab:
     st.write("Give them a nature. See what happens under pressure.")
     with st.form("cast_form"):
@@ -104,6 +123,32 @@ with cast_tab:
             state["trust"] = relationship_values
             st.rerun()
 
+with history_tab:
+    st.markdown("### What stays with them")
+    st.caption("Important witnessed exchanges, remembered across meetings. These are fictional game memories—not hidden thoughts or psychological assessments.")
+    history_cast = state["cast"] if human == "observer" else [character(state, human)]
+    for col, c in zip(st.columns(len(history_cast)), history_cast):
+        with col:
+            st.markdown(f'### {c["emoji"]} {c["name"]}')
+            for other, score in state["trust"][c["id"]].items():
+                st.caption(f'{character(state, other)["name"]}: {bond_label(score)} · {score}/100')
+            moments = remembered_moments(state, c["id"])
+            if not moments:
+                st.info("No defining moments yet. Let the conversation unfold.")
+            for moment in reversed(moments):
+                with st.container(border=True):
+                    label = {"support":"A moment of support", "challenge":"A point of friction", "deflect":"An unanswered point"}[moment["stance"]]
+                    st.caption(f'Scene {moment["scene"]} · {label}' + (" · Private" if len(moment["audience"]) == 2 else ""))
+                    st.text(f'{moment["name"]}: “{moment["text"]}”')
+    st.divider()
+    st.markdown("### The story so far")
+    for event in reversed([e for e in state["log"] if e["kind"] == "event"]):
+        with st.expander(f'Scene {event["scene"]} · {event["text"][:75]}'):
+            st.write(event["text"])
+            count = sum(e["kind"] == "line" and e["scene"] == event["scene"] and
+                        (human == "observer" or human in e["audience"]) for e in state["log"])
+            st.caption(f'{count} exchanges heard · full dialogue is in The office')
+
 audience = audience_for(state, human, recipient)
 with play:
     latest_event = next(e for e in reversed(state["log"]) if e["kind"] == "event")
@@ -115,12 +160,17 @@ with play:
                        (human == "observer" or human in e["audience"])][-3:]
         last = stage_lines[-1] if stage_lines else None
         office(cast=[{k: c[k] for k in ("id", "name", "role", "color")} for c in state["cast"]],
-               line=last, lines=stage_lines, human=human, scene=state["scene"], key="office_stage", default=None)
+               line=last, lines=stage_lines, human=human, scene=state["scene"],
+               story_revision=st.session_state.get("story_revision",0), key="office_stage", default=None)
         st.caption("Drag to orbit · Scroll to zoom · Select a character to focus · Home resets the view")
         for col, c in zip(st.columns(3), state["cast"]):
             with col:
                 st.markdown(f'<div class="castcard" style="--accent:{c["color"]}"><strong>{esc(c["name"])}</strong><br><span>{esc(c["role"])} · {"You" if c["id"] == human else "AI" if mode == "Live AI" else "Demo"}</span></div>', unsafe_allow_html=True)
         with st.expander("Drop in a situation"):
+            st.caption("Let the next meeting grow out of the team's relationships, or set your own scene.")
+            if st.button("Next episode", use_container_width=True):
+                add_event(state, next_episode(state))
+                st.rerun()
             preset = st.selectbox("Situation", list(SCENARIOS) + ["Write my own"])
             with st.form("situation"):
                 event = st.text_area("What happens?", value=SCENARIOS.get(preset, ""), key=f"event_{preset}", max_chars=2000)
@@ -180,9 +230,12 @@ with play:
         if human != "observer":
             with st.form("human_line", clear_on_submit=True):
                 words = st.text_area("Your words or action", placeholder="I put my notebook down. ‘Can we clarify who did the work?’", max_chars=2000)
+                delivery = st.selectbox("Your delivery", ["neutral", "support", "challenge", "deflect"],
+                    format_func=lambda s: {"neutral":"Let the words speak", "support":"Offer support", "challenge":"Push back", "deflect":"Sidestep the point"}[s],
+                    help="Optional: delivery changes the fictional trust scores and can become a remembered moment.")
                 if st.form_submit_button("Say it"):
                     if words.strip():
-                        add_line(state, human, words, audience)
+                        add_line(state, human, words, audience, stance=delivery)
                         st.rerun()
                     else:
                         st.error("Write something to say or do.")

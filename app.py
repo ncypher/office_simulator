@@ -13,13 +13,16 @@ st.set_page_config(page_title="Office Hours · A tiny workplace drama", page_ico
 st.markdown('''<style>
 .block-container{padding-top:1.7rem;padding-bottom:2rem;max-width:1560px}
 h1{font-size:2.5rem!important;letter-spacing:-.08rem} h3{font-size:1.2rem!important}
-[data-testid="stSidebar"]{border-right:1px solid #daddea}
-.eyebrow{color:#686d86;font-size:.8rem;font-weight:700;letter-spacing:.14em;margin:0}
-.scene-note{background:#eae7ff;border-left:4px solid #7964ed;border-radius:0 12px 12px 0;padding:14px 18px;margin:0 0 18px;font-size:1rem}
-.line{background:white;border:1px solid #e3e5ef;border-radius:14px;padding:14px 16px;margin-bottom:10px}
-.line .meta{font-size:.85rem;color:#71758b}.line p{margin:6px 0 0;line-height:1.5}
-.castcard{border-top:4px solid var(--accent);background:white;padding:14px;border-radius:10px;margin-bottom:12px}
-.castcard strong{font-size:1.1rem}.castcard span{color:#686d86;font-size:.85rem}
+[data-testid="stAppViewContainer"]{background:radial-gradient(ellipse at 75% 0%,#30225280,transparent 52%),radial-gradient(ellipse at 0% 90%,#12383d60,transparent 50%),#111426;color:#edf0ff}
+[data-testid="stHeader"]{background:#111426e8}
+[data-testid="stSidebar"]{background:#191c31;border-right:1px solid #343852}
+.eyebrow{color:#b4a6eb;font-size:.8rem;font-weight:700;letter-spacing:.14em;margin:0}
+.scene-note{background:linear-gradient(110deg,#352951,#24243e);color:#f2edff;border-left:4px solid #b09aff;border-radius:0 12px 12px 0;padding:14px 18px;margin:0 0 18px;font-size:1rem}
+.line{background:#20243a;color:#edf0ff;border:1px solid #373b56;border-radius:14px;padding:14px 16px;margin-bottom:10px}
+.line strong{filter:brightness(1.4)}
+.line .meta{font-size:.85rem;color:#b4b9d3}.line p{margin:6px 0 0;line-height:1.5}
+.castcard{border-top:4px solid var(--accent);background:linear-gradient(140deg,#292d46,#1c2035);color:#edf0ff;padding:14px;border-radius:10px;margin-bottom:12px;box-shadow:0 6px 24px #0002}
+.castcard strong{font-size:1.1rem}.castcard span{color:#b4b9d3;font-size:.85rem}
 </style>''', unsafe_allow_html=True)
 
 if "world" not in st.session_state:
@@ -107,10 +110,12 @@ with play:
     st.markdown(f'<div class="scene-note">{esc(latest_event["text"])}</div>', unsafe_allow_html=True)
     stage, transcript = st.columns([1.5, 1], gap="large")
     with stage:
-        last = next((e for e in reversed(state["log"]) if e["kind"] == "line" and
-                     (human == "observer" or human in e["audience"])), None)
+        stage_lines = [dict(e, playback_id=i) for i, e in enumerate(state["log"])
+                       if e["kind"] == "line" and e["scene"] == state["scene"] and
+                       (human == "observer" or human in e["audience"])][-3:]
+        last = stage_lines[-1] if stage_lines else None
         office(cast=[{k: c[k] for k in ("id", "name", "role", "color")} for c in state["cast"]],
-               line=last, human=human, scene=state["scene"], key="office_stage", default=None)
+               line=last, lines=stage_lines, human=human, scene=state["scene"], key="office_stage", default=None)
         st.caption("Drag to orbit · Scroll to zoom · Select a character to focus · Home resets the view")
         for col, c in zip(st.columns(3), state["cast"]):
             with col:

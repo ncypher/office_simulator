@@ -30,11 +30,12 @@ try {
   controls.minPolarAngle=.35; controls.maxPolarAngle=Math.PI/2.3;
   const home=()=>{camera.position.set(9,9,12);controls.target.set(0,.6,0);controls.update();};
   home();document.querySelector('#home').addEventListener('click',home);
-  scene.add(new THREE.HemisphereLight(0xffffff,0x9295b7,3));
-  const sun=new THREE.DirectionalLight(0xfff6e6,4);
+  scene.add(new THREE.HemisphereLight(0xd4d7ff,0x4e416e,2.1));
+  const sun=new THREE.DirectionalLight(0xffdeb7,2.8);
   sun.position.set(-3,10,7);sun.castShadow=true;
   sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-8;sun.shadow.camera.right=8;
   sun.shadow.camera.top=8;sun.shadow.camera.bottom=-8;sun.shadow.normalBias=.035;scene.add(sun);
+  const rim=new THREE.DirectionalLight(0x65cdd1,2);rim.position.set(5,4,-2);scene.add(rim);
   const mat=(color,roughness=.75)=>new THREE.MeshStandardMaterial({color,roughness});
   const cream=mat('#f5f0e9'),wood=mat('#d6af85'),ink=mat('#35364e'),metal=mat('#868ba3'),paper=mat('#fffdf6');
   function box(parent,x,y,z,w,h,d,material){const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);return mesh;}
@@ -84,9 +85,10 @@ try {
     sphere(head,0,0,0,.34,skin,1,1.1,.95);
     sphere(head,0,.18,-.025,.33,hair,1, .65,1);
     if(index===2){for(let i=0;i<8;i++)sphere(head,Math.sin(i)*.25,.18+Math.cos(i)*.08,-.09,.13,hair);}
+    const brows=[];
     for(const dx of [-.115,.115]){
       sphere(head,dx,.01,.292,.044,paper,1,1.3,.5);sphere(head,dx,.01,.314,.022,ink,.8,1.1,.5);
-      const brow=box(head,dx,.105,.29,.10,.022,.02,hair);brow.rotation.z=dx*(index===2?1.5:-.8);
+      const brow=box(head,dx,.105,.29,.10,.022,.02,hair);brow.rotation.z=dx*(index===2?1.5:-.8);brows.push(brow);
       sphere(head,dx*2.95,-.025,0,.064,skin,.6,1,.7);
     }
     sphere(head,0,-.055,.325,.046,skin,.8,.8,1);
@@ -97,16 +99,54 @@ try {
     const ring=new THREE.Mesh(new THREE.TorusGeometry(.52,.028,8,48),mat(state.cast[index].color));ring.rotation.x=Math.PI/2;ring.position.y=.06;root.add(ring);
     const label=document.createElement('div');label.className='tag';stage.append(label);
     root.traverse(o=>{o.userData.character=index;});
-    people.push({root,body,head,mouth,arms,ring,label,index});
+    people.push({root,body,head,mouth,arms,ring,label,index,brows});
   }
   person(0,0,-1.35,0);person(1,-2,.35,Math.PI/2);person(2,1.95,.55,-Math.PI/2);
+  let displayedLine=null, talkingUntil=0, timer=null, queue=[], beat=0, paused=false, signature='',lastSeen=-1,seat='';
+  const replay=document.querySelector('#replay'),pause=document.querySelector('#pause');
+  function showLine(line){
+    displayedLine=line;
+    talkingUntil=performance.now()+Math.min(9000,Math.max(3500,(line?.text.length||0)*35));
+    const c=state.cast.find(c=>c.id===line?.speaker);
+    people.forEach((p,i)=>{
+      const speaking=line?.speaker===state.cast[i].id;
+      p.label.textContent=state.cast[i].name+(state.human===state.cast[i].id?' · You':'')+(speaking?` · ${line.emotion||'neutral'}`:'');
+      p.label.style.borderColor=speaking?state.cast[i].color:'transparent';
+      const tense=speaking&&line.emotion==='tense';
+      p.brows.forEach((b,j)=>{b.rotation.z=(j===0?1:-1)*(tense?-.3: .12);});
+    });
+    document.querySelector('#speaker').textContent=c?`${line.name} ${line.audience?.length===2?'· Private exchange':''}`:'The room is yours.';
+    document.querySelector('#speaker').style.color=c?.color||'#d8ceff';
+    document.querySelector('#quote').textContent=line?.text||'Three coffees. One conversation waiting to happen.';
+  }
+  function schedule(){
+    clearTimeout(timer);
+    pause.disabled=queue.length<1;
+    pause.textContent=paused?'Resume':'Pause';
+    document.querySelector('#beat').textContent=queue.length?`${paused?'Paused · ':''}${beat+1} / ${queue.length}`:'Waiting for a turn';
+    if(paused)return;
+    timer=setTimeout(()=>{
+      if(beat+1<queue.length){beat++;showLine(queue[beat]);schedule();}
+      else{pause.disabled=true;document.querySelector('#beat').textContent='Your move';}
+    },Math.max(3500,talkingUntil-performance.now()));
+  }
+  function play(lines){clearTimeout(timer);queue=lines;beat=0;paused=false;showLine(queue[0]||null);schedule();}
+  replay.addEventListener('click',()=>play(state.lines||[]));
+  pause.addEventListener('click',()=>{paused=!paused;if(paused)talkingUntil=0;else talkingUntil=performance.now()+4500;schedule();});
+  window.addEventListener('pagehide',()=>clearTimeout(timer));
   applyState=()=>{
-    people.forEach((p,i)=>{p.label.textContent=state.cast[i].name+(state.human===state.cast[i].id?' · You':'');p.label.style.borderColor=state.line?.speaker===state.cast[i].id?state.cast[i].color:'transparent';});
     document.querySelector('#room').textContent=`CONFERENCE ROOM · SCENE ${String(state.scene).padStart(2,'0')}`;
-    const c=state.cast.find(c=>c.id===state.line?.speaker);
-    document.querySelector('#speaker').textContent=c?`${state.line.name} ${state.line.audience?.length===2?'· Private exchange':''}`:'The room is yours.';
-    document.querySelector('#speaker').style.color=c?.color||'#303550';
-    document.querySelector('#quote').textContent=state.line?.text||'Three coffees. One conversation waiting to happen.';
+    const lines=state.lines||[];
+    const nextSignature=JSON.stringify([state.human,state.scene,lines.map(l=>l.playback_id)]);
+    replay.disabled=lines.length===0;
+    if(nextSignature!==signature){
+      const newSeat=`${state.human}:${state.scene}`;
+      const fresh=newSeat===seat?lines.filter(l=>l.playback_id>lastSeen):lines;
+      seat=newSeat;lastSeen=lines.at(-1)?.playback_id??-1;signature=nextSignature;
+      play(fresh.length?fresh:lines);
+    }else{
+      people.forEach((p,i)=>{p.label.textContent=state.cast[i].name+(state.human===state.cast[i].id?' · You':'');});
+    }
   };
   applyState();
   const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();let start;
@@ -123,8 +163,16 @@ try {
   renderer.setAnimationLoop(()=>{
     const t=clock.getElapsedTime();
     people.forEach(p=>{
-      const active=state.line?.speaker===state.cast[p.index].id;
-      if(!reduced.matches){p.body.position.y=Math.sin(t*1.8+p.index)*.015;p.head.rotation.z=Math.sin(t*1.2+p.index)*.035;p.arms[0].rotation.x=active?-.25+Math.sin(t*3)*.15:0;p.mouth.scale.y=active?1.3+Math.sin(t*9)*.65:1;}
+      const active=displayedLine?.speaker===state.cast[p.index].id;
+      const talking=active&&!paused&&performance.now()<talkingUntil;
+      if(!reduced.matches){
+        p.body.position.y=Math.sin(t*1.8+p.index)*.015;
+        p.head.rotation.z=Math.sin(t*1.2+p.index)*.035;
+        p.head.rotation.x=active&&displayedLine?.emotion==='thoughtful' ? .12 : 0;
+        p.arms[0].rotation.x=talking?-.25+Math.sin(t*3)*.15:0;
+        p.arms[1].rotation.z=active&&displayedLine?.emotion==='tense'?-.25:0;
+        p.mouth.scale.y=talking?1.3+Math.sin(t*9)*.65:1;
+      }else{p.body.position.y=0;p.head.rotation.set(0,0,0);p.arms.forEach(a=>a.rotation.set(0,0,0));p.mouth.scale.y=1;}
       p.ring.visible=active||state.human===state.cast[p.index].id;
       position.copy(p.root.position);position.y=2.5;position.project(camera);p.label.style.left=`${(position.x*.5+.5)*stage.clientWidth}px`;p.label.style.top=`${(-position.y*.5+.5)*stage.clientHeight}px`;
     });

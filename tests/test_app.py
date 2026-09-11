@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import unittest
 from streamlit.testing.v1 import AppTest
 
@@ -24,9 +25,21 @@ class AppWorkflowTests(unittest.TestCase):
         self.assertTrue(self.button(app,"Next turn").disabled)
         app.selectbox(key="human").select("boss").run()
         self.assertNotIn("PRIVATE TEST MESSAGE"," ".join(x.value for x in app.markdown))
+        self.assertNotIn("PRIVATE TEST MESSAGE",app.get("component_instance")[0].proto.json_args)
         app.selectbox(key="human").select("observer").run()
         self.assertFalse(self.button(app,"Next turn").disabled)
         self.assertEqual(len(app.exception),0)
+
+    def test_new_scene_clears_old_playback(self):
+        from engine import add_event
+        app=AppTest.from_file(APP,default_timeout=30).run()
+        self.button(app,"Run 3 turns").click().run()
+        self.assertEqual(len(json.loads(app.get("component_instance")[0].proto.json_args)["lines"]),3)
+        add_event(app.session_state["world"],"A new meeting begins.")
+        app.run()
+        payload=json.loads(app.get("component_instance")[0].proto.json_args)
+        self.assertEqual(payload["lines"],[])
+        self.assertIsNone(payload["line"])
 
     def test_live_mode_without_key_does_not_change_dialogue(self):
         app=AppTest.from_file(APP,default_timeout=30).run()

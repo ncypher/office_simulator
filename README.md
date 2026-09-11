@@ -22,6 +22,8 @@ On macOS/Linux use `.venv/bin/python` instead. Open the local URL printed by Str
 
 Drag the office to orbit, scroll to zoom, click a character to focus, or click **Home** to reset the camera. The conversation controls remain usable if WebGL is unavailable. Three.js is bundled locally so the office has no runtime CDN dependency.
 
+The office uses a dark indigo, plum, and teal palette with warm room lighting. New exchanges play one at a time in the stage bubble. **Pause / Resume** controls playback; **Replay last turns** revisits up to three visible lines from the current scene without making API calls. Characters gesture while their line is playing, then settle. Mood labels and eyebrows reflect their fictional response. Reduced-motion system preferences suppress character animation.
+
 ## Live AI
 
 Select **Live AI** and enter an OpenAI API key plus a text-model ID available to your account. `gpt-4.1-mini` is the editable starting value. You may instead set `OPENAI_API_KEY` in the server environment. Calls use the [OpenAI Responses API](https://developers.openai.com/api/docs/quickstart), on the Python server, with `store=False`, a 35-second timeout and no automatic retries. Every click makes at most three requests and stops when the human character's turn arrives. There are no background calls.

@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import html
 import unittest
 from streamlit.testing.v1 import AppTest
 
@@ -41,6 +42,26 @@ class AppWorkflowTests(unittest.TestCase):
         payload=json.loads(app.get("component_instance")[0].proto.json_args)
         self.assertEqual(payload["lines"],[])
         self.assertIsNone(payload["line"])
+
+    def test_transcript_waits_for_each_playback_reveal(self):
+        app=AppTest.from_file(APP,default_timeout=30).run()
+        self.button(app,"Run 3 turns").click().run()
+        lines=[e for e in app.session_state["world"]["log"] if e["kind"]=="line"]
+        rendered=html.unescape(" ".join(x.value for x in app.markdown))
+        for line in lines:
+            self.assertNotIn(line["text"], rendered)
+        self.assertTrue(self.button(app,"Run 3 turns").disabled)
+        pending=dict(app.session_state["pending_stage"],revealed=1)
+        app.session_state["pending_stage"]=pending
+        app.run()
+        rendered=html.unescape(" ".join(x.value for x in app.markdown))
+        self.assertIn(lines[0]["text"],rendered)
+        for line in lines[1:]:
+            self.assertNotIn(line["text"],rendered)
+        app.session_state["pending_stage"]=None
+        app.run()
+        self.assertFalse(self.button(app,"Run 3 turns").disabled)
+        self.assertEqual(len(app.exception),0)
 
     def test_live_mode_without_key_does_not_change_dialogue(self):
         app=AppTest.from_file(APP,default_timeout=30).run()

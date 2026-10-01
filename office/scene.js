@@ -1,3 +1,4 @@
+import { createPlayback, speakingDuration } from './playback.mjs';
 import * as THREE from 'three';
 import { SEATS, chooseBlocking, makeBlocking, sampleBlocking, BLOCKING_LABELS } from './blocking.mjs';
 import { OrbitControls } from './vendor/OrbitControls.js';
@@ -15,6 +16,43 @@ window.addEventListener('message', event => {
 send('streamlit:componentReady', {apiVersion:1});
 send('streamlit:setFrameHeight', {height:document.body.scrollHeight});
 
+function acknowledge(line,complete=false){
+  send('streamlit:setComponentValue',{value:{context:state.playback_context,playback_id:line.playback_id,complete},dataType:'json'});
+}
+// Keep sequential dialogue usable on devices without a WebGL context.
+function installTextPlayback(){
+  let signature='',seat='',lastSeen=-1;
+  const pause=document.querySelector('#pause');
+  const playback=createPlayback({
+    onLine(line){
+      document.querySelector('#speaker').textContent=line?.name||'The room is yours.';
+      document.querySelector('#quote').textContent=line?.text||'Three coffees. One conversation waiting to happen.';
+      document.querySelector('#action').textContent=line?.action||'';
+      document.querySelector('#blocking').textContent='';
+      if(line)acknowledge(line);
+    },
+    onPhase(info){
+      pause.disabled=info.phase==='idle';pause.textContent=info.paused?'Resume':'Pause';
+      document.querySelector('#beat').textContent=info.phase==='idle'?'Your move':`${info.index+1} / ${info.total}`;
+      document.querySelector('#phase').textContent=info.paused?'Conversation paused':info.phase==='speaking'?'Speaking · the others are listening':info.phase==='listening'?'A moment to let that land…':info.phase==='thinking'?`${info.next?.name||'The next speaker'} is considering a response…`:'Your move';
+      if(info.phase==='idle'&&info.current)acknowledge(info.current,true);
+    },
+  });
+  document.querySelector('#replay').addEventListener('click',()=>playback.play(state.lines||[]));
+  pause.addEventListener('click',()=>playback.toggle());
+  document.querySelector('#motion').disabled=true;document.querySelector('#sound').disabled=true;
+  applyState=()=>{
+    const lines=state.lines||[],nextSeat=`${state.story_revision}:${state.human}:${state.scene}`;
+    const next=JSON.stringify([nextSeat,lines.map(l=>l.playback_id)]);
+    document.querySelector('#room').textContent=`CONFERENCE ROOM · SCENE ${state.scene}`;
+    document.querySelector('#replay').disabled=!lines.length;
+    if(next===signature)return;
+    const fresh=nextSeat===seat?lines.filter(l=>l.playback_id>lastSeen):lines;
+    seat=nextSeat;lastSeen=lines.at(-1)?.playback_id??-1;signature=next;
+    playback.play(fresh.length?fresh:lines);
+  };
+  window.addEventListener('pagehide',()=>playback.dispose());applyState();
+}
 try {
   const scene = new THREE.Scene();
   const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true});
@@ -123,7 +161,7 @@ try {
     people.push({root,body,head,mouth,arms,ring,label,index,brows,chair,legs,heldMug,marker,plan:makeBlocking('seated',index),elapsed:0});
   }
   person(0,0,-1.35,0);person(1,-2,.35,Math.PI/2);person(2,1.95,.55,-Math.PI/2);
-  let displayedLine=null, talkingUntil=0, timer=null, queue=[], beat=0, paused=false, signature='',lastSeen=-1,seat='';
+  let displayedLine=null, talkingUntil=0, queue=[], beat=0, paused=false, phase='idle', signature='',lastSeen=-1,seat='';
   const replay=document.querySelector('#replay'),pause=document.querySelector('#pause'),bubble=document.querySelector('#bubble');
   let audio=null, soundOn=false, nextSyllable=0;
   const sound=document.querySelector('#sound');
@@ -154,7 +192,7 @@ try {
   motion.addEventListener('click',()=>{motionOn=!motionOn;motion.textContent=motionOn?'Stage motion on':'Stage motion off';motion.setAttribute('aria-pressed',String(motionOn));if(!motionOn)resetBlocking();});
   function showLine(line){
     displayedLine=line;
-    talkingUntil=performance.now()+Math.min(9000,Math.max(3500,(line?.text.length||0)*35));
+    talkingUntil=performance.now()+speakingDuration(line||{});
     const c=state.cast.find(c=>c.id===line?.speaker);
     const performer=people.find(p=>state.cast[p.index].id===line?.speaker);
     const kind=chooseBlocking(line||{});
@@ -183,24 +221,26 @@ try {
     document.querySelector('#speaker').style.color=c?.color||'#d8ceff';
     document.querySelector('#quote').textContent=line?.text||'Three coffees. One conversation waiting to happen.';
     document.querySelector('#quote').scrollTop=0;
+    if(line)acknowledge(line);
     requestAnimationFrame(()=>send('streamlit:setFrameHeight',{height:document.body.scrollHeight}));
   }
-  function schedule(){
-    clearTimeout(timer);
-    pause.disabled=queue.length<1;
-    pause.textContent=paused?'Resume':'Pause';
-    document.querySelector('#beat').textContent=queue.length?`${paused?'Paused · ':''}${beat+1} / ${queue.length}`:'Waiting for a turn';
-    if(paused)return;
-    timer=setTimeout(()=>{
-      if(beat+1<queue.length){beat++;showLine(queue[beat]);schedule();}
-      else{pause.disabled=false;document.querySelector('#beat').textContent='Your move';}
-    },Math.max(3500,talkingUntil-performance.now()));
-  }
-  function play(lines){clearTimeout(timer);queue=lines;beat=0;paused=false;showLine(queue[0]||null);schedule();}
+  const playback=createPlayback({
+    onLine:showLine,
+    duration:()=>Math.max(speakingDuration(displayedLine||{}),talkingUntil-performance.now()),
+    onPhase(info){
+      phase=info.phase;paused=info.paused;beat=info.index;
+      pause.disabled=phase==='idle';pause.textContent=paused?'Resume':'Pause';
+      document.querySelector('#beat').textContent=phase==='idle'?'Your move':`${paused?'Paused · ':''}${beat+1} / ${info.total}`;
+      const next=state.cast.find(c=>c.id===info.next?.speaker);
+      document.querySelector('#phase').textContent=paused?'Conversation paused':phase==='speaking'?'Speaking · the others are listening':phase==='listening'?'A moment to let that land…':phase==='thinking'?`${next?.name||'The next speaker'} is considering a response…`:'Your move';
+      if(phase!=='speaking'){bubble.textContent='…';}
+      if(phase==='idle'&&info.current)acknowledge(info.current,true);
+    },
+  });
+  function play(lines){queue=lines;playback.play(lines);}
   replay.addEventListener('click',()=>{resetBlocking();play(state.lines||[]);});
-  let pausedAt=0;
-  pause.addEventListener('click',()=>{paused=!paused;if(paused)pausedAt=performance.now();else talkingUntil+=performance.now()-pausedAt;schedule();});
-  window.addEventListener('pagehide',()=>clearTimeout(timer));
+  pause.addEventListener('click',()=>playback.toggle());
+  window.addEventListener('pagehide',()=>playback.dispose());
   applyState=()=>{
     document.querySelector('#room').textContent=`CONFERENCE ROOM · SCENE ${String(state.scene).padStart(2,'0')}`;
     const lines=state.lines||[];
@@ -247,7 +287,7 @@ try {
     }
     people.forEach(p=>{
       const active=displayedLine?.speaker===state.cast[p.index].id;
-      const talking=active&&!paused&&performance.now()<talkingUntil;
+      const talking=active&&!paused&&phase==='speaking';
       if(talking)mumble(p.index);
       const movingEnabled=motionOn&&!reduced.matches;
       if(!paused&&!document.hidden)p.elapsed+=dt*(p.rate||1);
@@ -267,6 +307,9 @@ try {
         p.body.position.y=.3*pose.stand+(!paused?Math.sin(t*1.8+p.index)*.015:0);
         p.head.rotation.z=!paused?Math.sin(t*1.2+p.index)*.035:0;
         p.head.rotation.x=active&&displayedLine?.emotion==='thoughtful' ? .12 : 0;
+        const currentSpeaker=people.find(other=>displayedLine?.speaker===state.cast[other.index].id);
+        p.head.rotation.y=!active&&currentSpeaker?Math.atan2(currentSpeaker.root.position.x-p.root.position.x,currentSpeaker.root.position.z-p.root.position.z)-p.root.rotation.y:0;
+        p.head.rotation.y=Math.atan2(Math.sin(p.head.rotation.y),Math.cos(p.head.rotation.y))*.35;
         p.arms[0].rotation.x=pose.moving&&!paused?Math.sin(p.elapsed*11)*.3:talking?-.25+Math.sin(t*3)*.15:0;
         if(p.heldMug.visible)p.arms[1].rotation.x=-.7;
         else if(p.marker.visible)p.arms[1].rotation.x=-1.1;
@@ -282,4 +325,4 @@ try {
     });
     renderer.render(scene,camera);
   });
-}catch(error){document.querySelector('#error').style.display='block';console.error('Office scene failed',error);}
+}catch(error){document.querySelector('#error').style.display='block';console.error('Office scene failed',error);installTextPlayback();}

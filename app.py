@@ -9,6 +9,7 @@ from engine import (fresh_state, SCENARIOS, add_event, add_line, audience_for,
                     remembered_moments, bond_label, next_episode)
 from dialogue import live_reply, check_connection
 from saves import import_state
+from presentation import update_pending, is_revealed
 
 ROOT = Path(__file__).parent
 office = components.declare_component("little_office", path=str(ROOT / "office"))
@@ -182,9 +183,13 @@ with play:
                        if e["kind"] == "line" and e["scene"] == state["scene"] and
                        (human == "observer" or human in e["audience"])][-3:]
         last = stage_lines[-1] if stage_lines else None
-        office(cast=[{k: c[k] for k in ("id", "name", "role", "color")} for c in state["cast"]],
+        playback_context = f"{st.session_state.get('story_revision',0)}:{human}:{state['scene']}"
+        stage_ack = office(cast=[{k: c[k] for k in ("id", "name", "role", "color")} for c in state["cast"]],
                line=last, lines=stage_lines, human=human, scene=state["scene"],
-               story_revision=st.session_state.get("story_revision",0), key="office_stage", default=None)
+               story_revision=st.session_state.get("story_revision",0), playback_context=playback_context,
+               key="office_stage", default=None)
+        pending = update_pending(st.session_state.get("pending_stage"), stage_ack, playback_context)
+        st.session_state.pending_stage = pending
         st.caption("Drag to orbit · Scroll to zoom · Select a character to focus · Home resets the view · Stage motion follows mood and actions")
         for col, c in zip(st.columns(3), state["cast"]):
             with col:
@@ -216,7 +221,8 @@ with play:
             st.error(st.session_state.pop("turn_error"))
         st.caption("Director view · includes private exchanges" if human == "observer" else f'Playing {character(state, human)["name"]} · only exchanges this character heard')
         with st.container(height=380):
-            visible = [e for e in state["log"] if human == "observer" or human in e["audience"]]
+            visible = [e for i, e in enumerate(state["log"])
+                       if (human == "observer" or human in e["audience"]) and is_revealed(i, pending)]
             if not any(e["kind"] == "line" for e in visible):
                 st.info("The meeting is about to begin. Advance a turn, or take a seat and break the silence.")
             for e in visible:
@@ -226,18 +232,21 @@ with play:
                 c = character(state, e["speaker"])
                 private = " · Private" if len(e["audience"]) == 2 else ""
                 st.markdown(f'<div class="line"><strong style="color:{c["color"]}">{esc(e["name"])}</strong><span class="meta"> · {esc(e["source"])}{private}</span><p>{esc(e["text"])}</p><p class="meta">{esc(e["action"])}</p></div>', unsafe_allow_html=True)
+        if pending:
+            st.caption("Replies appear here as each character speaks. The room pauses to listen and think between turns.")
         speaker = next_speaker(state, audience)
         if human == speaker:
             st.caption("Your turn. Speak below, or choose Observe the scene to hand control back.")
         else:
             st.caption(f'Next: {character(state, speaker)["name"]}' + (" · private conversation" if len(audience) == 2 else ""))
         left, right = st.columns(2)
-        advance = left.button("Next turn", type="primary", disabled=human == speaker, use_container_width=True)
-        run = right.button("Run 3 turns", disabled=human == speaker, use_container_width=True)
+        advance = left.button("Next turn", type="primary", disabled=human == speaker or bool(pending), use_container_width=True)
+        run = right.button("Run 3 turns", disabled=human == speaker or bool(pending), use_container_width=True)
         if advance or run:
             if mode == "Live AI" and (not api_key.strip() or not model.strip()):
                 st.error("Enter your API key and model in the sidebar, or choose Demo.")
             else:
+                batch_start = len(state["log"])
                 for _ in range(3 if run else 1):
                     speaker = next_speaker(state, audience)
                     if speaker == human:
@@ -249,6 +258,9 @@ with play:
                     except Exception:
                         st.session_state.turn_error = "This turn couldn't be completed. Check the key, model access, connection, or API quota and try again. No replacement demo response was inserted."
                         break
+                batch_ids = [i for i in range(batch_start, len(state["log"])) if state["log"][i]["kind"] == "line"]
+                if batch_ids:
+                    st.session_state.pending_stage = dict(context=playback_context, ids=batch_ids, revealed=batch_start-1)
                 st.rerun()
         if human != "observer":
             with st.form("human_line", clear_on_submit=True):
@@ -258,6 +270,7 @@ with play:
                     help="Optional: delivery changes the fictional trust scores and can become a remembered moment.")
                 if st.form_submit_button("Say it"):
                     if words.strip():
+                        st.session_state.pending_stage = None
                         add_line(state, human, words, audience, stance=delivery)
                         st.rerun()
                     else:

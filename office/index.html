@@ -14,7 +14,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}#hud{position:abso
 #bubble::after{content:"";position:absolute;left:var(--tail-x,50%);bottom:-7px;width:12px;height:12px;background:#191c32;border-right:1px solid var(--voice,#a99be4);border-bottom:1px solid var(--voice,#a99be4);transform:translateX(-50%) rotate(45deg)}
 #bubble.idle::after{display:none}
 #bubble strong{font-size:14px;filter:brightness(1.4)}#quote{margin-top:4px;font-size:14px;max-height:104px;overflow:auto;overflow-wrap:anywhere;scrollbar-width:thin}.tag{position:absolute;transform:translate(-50%,-50%);background:#20243aee;color:#f1efff;border-radius:20px;padding:5px 10px;white-space:nowrap;font-size:12px;pointer-events:none;border:2px solid transparent}
-#subtitles{margin-top:10px;padding:14px 18px;background:#20243a;border:1px solid #45435e;border-radius:14px;min-height:115px}#subtitles strong{filter:brightness(1.4)}#blocking{color:#a9e8d5;font-size:12px;margin-top:5px}#action{color:#b8bdd7;font-size:12px;margin-top:6px}#bubble.idle{display:none}
+#subtitles{margin-top:10px;padding:14px 18px;background:#20243a;border:1px solid #45435e;border-radius:14px;min-height:115px}#subtitles strong{filter:brightness(1.4)}#phase{color:#d8ceff;font-size:12px;margin-top:8px}#blocking{color:#a9e8d5;font-size:12px;margin-top:5px}#action{color:#b8bdd7;font-size:12px;margin-top:6px}#bubble.idle{display:none}
 #error{position:absolute;inset:100px 25px auto;background:#20243a;padding:20px;border-radius:16px;display:none}
 @media(max-width:480px){#stage{height:420px}#quote{max-height:90px}.tag{font-size:12px}#hud{left:10px}.playback{gap:6px;padding:8px}.playback button{padding:7px 9px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
@@ -26,5 +26,5 @@ canvas{display:block;width:100%;height:100%;touch-action:none}#hud{position:abso
 <div class="playback"><button id="replay" disabled>Replay last turns</button><button id="pause" disabled>Pause</button><button id="motion" aria-pressed="true">Stage motion on</button><button id="sound" aria-pressed="false">Sound off</button><span id="beat">Waiting for a turn</span></div>
 <div id="error">The 3D view couldn’t start on this device. You can still play using the conversation controls.</div>
 </div>
-<section id="subtitles" aria-live="polite"><strong id="speaker">The room is yours.</strong><div id="quote" tabindex="0" aria-label="Current dialogue">Three coffees. One conversation waiting to happen.</div><div id="action"></div><div id="blocking" aria-label="Stage direction"></div></section>
+<section id="subtitles" aria-live="polite"><strong id="speaker">The room is yours.</strong><div id="quote" tabindex="0" aria-label="Current dialogue">Three coffees. One conversation waiting to happen.</div><div id="action"></div><div id="phase" role="status">Waiting for a turn</div><div id="blocking" aria-label="Stage direction"></div></section>
 <script type="module" src="./scene.js"></script></body></html>

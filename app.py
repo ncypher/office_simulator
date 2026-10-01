@@ -185,7 +185,7 @@ with play:
         office(cast=[{k: c[k] for k in ("id", "name", "role", "color")} for c in state["cast"]],
                line=last, lines=stage_lines, human=human, scene=state["scene"],
                story_revision=st.session_state.get("story_revision",0), key="office_stage", default=None)
-        st.caption("Drag to orbit · Scroll to zoom · Select a character to focus · Home resets the view")
+        st.caption("Drag to orbit · Scroll to zoom · Select a character to focus · Home resets the view · Stage motion follows mood and actions")
         for col, c in zip(st.columns(3), state["cast"]):
             with col:
                 st.markdown(f'<div class="castcard" style="--accent:{c["color"]}"><strong>{esc(c["name"])}</strong><br><span>{esc(c["role"])} · {"You" if c["id"] == human else "AI" if mode == "Live AI" else "Demo"}</span></div>', unsafe_allow_html=True)

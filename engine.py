@@ -174,7 +174,11 @@ def demo_reply(state, speaker, audience):
     if c["assertiveness"] <= 3:
         text = "I might be missing something, but " + text[0].lower() + text[1:]
     return dict(text=text, stance=stance, emotion={"support": "warm", "challenge": "tense"}.get(stance, "thoughtful"),
-                action={"boss": "Sets the coffee mug down.", "alex": "Glances around the table.", "sam": "Closes the notebook."}[speaker])
+                action=("Gets up and paces beside the table." if stance == "challenge" else
+                        "Gets a coffee and takes a sip." if stance == "support" and n % 3 == 0 else
+                        "Looks out the window, collecting their thoughts." if stance == "deflect" else
+                        "Stands and points at the whiteboard." if n % 3 == 2 else
+                        {"boss": "Sets the coffee mug down.", "alex": "Glances around the table.", "sam": "Closes the notebook."}[speaker]))
 
 def export_state(state):
     from saves import clean_state, MAX_BYTES

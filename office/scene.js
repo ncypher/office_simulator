@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SEATS, chooseBlocking, makeBlocking, sampleBlocking, BLOCKING_LABELS } from './blocking.mjs';
 import { OrbitControls } from './vendor/OrbitControls.js';
 
 const stage = document.querySelector('#stage');
@@ -60,7 +61,17 @@ try {
   box(scene,1.35,1.76,-2.94,1.5,.025,.02,metal);
   // Credenza, files, lamp, and plants.
   box(scene,2.75,.52,-2.5,1.75,1,.64,wood);box(scene,2.75,.57,-2.15,.025,.82,.02,metal);
-  plant(-3.4,-2.3,1.2);plant(3.35,1.9,.95);
+  plant(-3.4,-2.3,1.2);plant(3.7,2.6,.75);
+  // Actual destinations for stage directions: coffee, ideas, and a breather.
+  box(scene,3.25,1.3,-2.45,.55,.5,.38,ink);
+  box(scene,3.25,1.32,-2.23,.35,.23,.035,metal);
+  cylinder(scene,3.25,1.09,-2.18,.08,.07,.15,cream);
+  sphere(scene,3.38,1.43,-2.21,.035,mat('#79e5cb'));
+  // An open door on the right, away from the camera-facing wall.
+  box(scene,4.04,1.35,.1,.1,2.65,1.25,wood);
+  box(scene,3.97,1.35,.1,.045,2.4,1.04,mat('#666184'));
+  sphere(scene,3.93,1.25,.48,.045,mat('#efab44'));
+
   for(let i=0;i<4;i++)box(scene,2.25+i*.15,1.25,-2.5,.1,.43,.3,mat(['#7964ed','#efab44','#f5f0e9','#32a9a1'][i]));
   // Meeting table: oval top, two sturdy legs.
   cylinder(scene,0,1.05,.25,1.6,1.6,.14,wood).scale.set(1.1,1,.72);
@@ -74,12 +85,22 @@ try {
     const root=new THREE.Group();root.position.set(x,0,z);root.rotation.y=rotation;scene.add(root);
     const body=new THREE.Group();root.add(body);
     const shirt=mat(state.cast[index].color),skin=mat(['#dba681','#f1c4a1','#97694f'][index]),hair=mat(['#473637','#70472f','#292a38'][index]);
-    // Chairs.
-    box(root,0,.53,0,.74,.13,.65,ink);box(root,0,.93,-.28,.7,.78,.13,ink);
-    cylinder(root,0,.25,0,.07,.07,.5,metal);
-    for(let j=0;j<4;j++){const foot=box(root,0,.06,0,.7,.05,.08,metal);foot.rotation.y=j*Math.PI/4;}
+    // Chairs stay at the meeting table while their occupants move.
+    const chair=new THREE.Group();chair.position.copy(root.position);chair.rotation.copy(root.rotation);scene.add(chair);
+    box(chair,0,.53,0,.74,.13,.65,ink);box(chair,0,.93,-.28,.7,.78,.13,ink);
+    cylinder(chair,0,.25,0,.07,.07,.5,metal);
+    for(let j=0;j<4;j++){const foot=box(chair,0,.06,0,.7,.05,.08,metal);foot.rotation.y=j*Math.PI/4;}
     sphere(body,0,.98,0,.42,shirt,.85,1.1,.65);
-    for(const dx of [-.18,.18]){box(body,dx,.5,.23,.18,.52,.2,ink);sphere(body,dx,.26,.35,.14,ink,1,.65,1.7);}
+    const legs=[];
+    for(const dx of [-.18,.18]){
+      const leg=new THREE.Group();body.add(leg);
+      const shin=box(leg,dx,.5,.23,.18,.52,.2,ink);
+      const shoe=sphere(leg,dx,.26,.35,.14,ink,1,.65,1.7);
+      legs.push({leg,shin,shoe});
+    }
+    const heldMug=new THREE.Group();body.add(heldMug);heldMug.visible=false;
+    cylinder(heldMug,.4,1.05,.3,.095,.08,.18,cream);
+    const marker=box(body,.4,1.15,.24,.035,.035,.22,ink);marker.visible=false;
     cylinder(body,0,1.39,0,.105,.105,.19,skin);
     const head=new THREE.Group();head.position.y=1.72;body.add(head);
     sphere(head,0,0,0,.34,skin,1,1.1,.95);
@@ -99,7 +120,7 @@ try {
     const ring=new THREE.Mesh(new THREE.TorusGeometry(.52,.028,8,48),mat(state.cast[index].color));ring.rotation.x=Math.PI/2;ring.position.y=.06;root.add(ring);
     const label=document.createElement('div');label.className='tag';stage.append(label);
     root.traverse(o=>{o.userData.character=index;});
-    people.push({root,body,head,mouth,arms,ring,label,index,brows});
+    people.push({root,body,head,mouth,arms,ring,label,index,brows,chair,legs,heldMug,marker,plan:makeBlocking('seated',index),elapsed:0});
   }
   person(0,0,-1.35,0);person(1,-2,.35,Math.PI/2);person(2,1.95,.55,-Math.PI/2);
   let displayedLine=null, talkingUntil=0, timer=null, queue=[], beat=0, paused=false, signature='',lastSeen=-1,seat='';
@@ -127,10 +148,24 @@ try {
     osc.connect(filter);filter.connect(gain);gain.connect(audio.destination);osc.start(now);osc.stop(now+.21);
     osc.onended=()=>{osc.disconnect();filter.disconnect();gain.disconnect();};
   }
+  let motionOn=true,frameTime=performance.now(),lastRevision=null;
+  const motion=document.querySelector('#motion');
+  function resetBlocking(){people.forEach(p=>{p.plan=makeBlocking('seated',p.index);p.elapsed=0;});}
+  motion.addEventListener('click',()=>{motionOn=!motionOn;motion.textContent=motionOn?'Stage motion on':'Stage motion off';motion.setAttribute('aria-pressed',String(motionOn));if(!motionOn)resetBlocking();});
   function showLine(line){
     displayedLine=line;
     talkingUntil=performance.now()+Math.min(9000,Math.max(3500,(line?.text.length||0)*35));
     const c=state.cast.find(c=>c.id===line?.speaker);
+    const performer=people.find(p=>state.cast[p.index].id===line?.speaker);
+    const kind=chooseBlocking(line||{});
+    if(performer){
+      // A new cue for the same person starts from their chair, never a stale path.
+      performer.plan=makeBlocking(kind,performer.index);performer.elapsed=0;
+      performer.rate=Math.max(1,performer.plan.duration/10);
+      if(motionOn&&!matchMedia('(prefers-reduced-motion: reduce)').matches)
+        talkingUntil=performance.now()+Math.max(talkingUntil-performance.now(),Math.min(performer.plan.duration,10)*1000+200);
+    }
+    document.querySelector('#blocking').textContent=c?BLOCKING_LABELS[kind]:'';
     bubble.classList.toggle('idle',!c);
     bubble.dataset.speaker=c?.id||'';
     bubble.setAttribute('aria-label',c?`${line.name} is the current speaker`:'No current speaker');
@@ -158,12 +193,13 @@ try {
     if(paused)return;
     timer=setTimeout(()=>{
       if(beat+1<queue.length){beat++;showLine(queue[beat]);schedule();}
-      else{pause.disabled=true;document.querySelector('#beat').textContent='Your move';}
+      else{pause.disabled=false;document.querySelector('#beat').textContent='Your move';}
     },Math.max(3500,talkingUntil-performance.now()));
   }
   function play(lines){clearTimeout(timer);queue=lines;beat=0;paused=false;showLine(queue[0]||null);schedule();}
-  replay.addEventListener('click',()=>play(state.lines||[]));
-  pause.addEventListener('click',()=>{paused=!paused;if(paused)talkingUntil=0;else talkingUntil=performance.now()+4500;schedule();});
+  replay.addEventListener('click',()=>{resetBlocking();play(state.lines||[]);});
+  let pausedAt=0;
+  pause.addEventListener('click',()=>{paused=!paused;if(paused)pausedAt=performance.now();else talkingUntil+=performance.now()-pausedAt;schedule();});
   window.addEventListener('pagehide',()=>clearTimeout(timer));
   applyState=()=>{
     document.querySelector('#room').textContent=`CONFERENCE ROOM · SCENE ${String(state.scene).padStart(2,'0')}`;
@@ -173,6 +209,8 @@ try {
     if(nextSignature!==signature){
       const newSeat=`${state.human}:${state.scene}`;
       const fresh=newSeat===seat?lines.filter(l=>l.playback_id>lastSeen):lines;
+      if(newSeat!==seat || state.story_revision!==lastRevision)resetBlocking();
+      lastRevision=state.story_revision;
       seat=newSeat;lastSeen=lines.at(-1)?.playback_id??-1;signature=nextSignature;
       play(fresh.length?fresh:lines);
     }else{
@@ -192,7 +230,7 @@ try {
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const clock=new THREE.Clock(),position=new THREE.Vector3(),headPosition=new THREE.Vector3();
   renderer.setAnimationLoop(()=>{
-    const t=clock.getElapsedTime();
+    const t=clock.getElapsedTime(),now=performance.now(),dt=Math.min(.05,(now-frameTime)/1000);frameTime=now;
     controls.update();camera.updateMatrixWorld();
     const speaking=people.find(p=>displayedLine?.speaker===state.cast[p.index].id);
     if(speaking){
@@ -211,11 +249,28 @@ try {
       const active=displayedLine?.speaker===state.cast[p.index].id;
       const talking=active&&!paused&&performance.now()<talkingUntil;
       if(talking)mumble(p.index);
+      const movingEnabled=motionOn&&!reduced.matches;
+      if(!paused&&!document.hidden)p.elapsed+=dt*(p.rate||1);
+      const pose=movingEnabled?sampleBlocking(p.plan,p.elapsed):{...SEATS[p.index],stand:0,activity:0,moving:false,done:true};
+      p.root.position.set(pose.x,0,pose.z);p.root.rotation.y=pose.yaw;
+      p.root.userData.blocking=p.plan.kind;
+      p.heldMug.visible=movingEnabled&&p.plan.kind==='coffee'&&pose.activity>0&&!pose.moving&&!pose.done;
+      p.heldMug.position.y=p.heldMug.visible ? .2 : 0;
+      p.marker.visible=movingEnabled&&p.plan.kind==='board'&&pose.activity>0&&!pose.moving&&!pose.done;
+      p.legs.forEach(({leg,shin,shoe},j)=>{
+        leg.position.y=-.3*pose.stand;
+        shin.scale.y=1+pose.stand*.6;
+        shin.position.z=.23*(1-pose.stand);shoe.position.z=.35-.2*pose.stand;shoe.position.y=.26-.09*pose.stand;
+        leg.rotation.x=pose.moving&&!paused?Math.sin(p.elapsed*11+j*Math.PI)*.3:0;
+      });
       if(!reduced.matches){
-        p.body.position.y=Math.sin(t*1.8+p.index)*.015;
-        p.head.rotation.z=Math.sin(t*1.2+p.index)*.035;
+        p.body.position.y=.3*pose.stand+(!paused?Math.sin(t*1.8+p.index)*.015:0);
+        p.head.rotation.z=!paused?Math.sin(t*1.2+p.index)*.035:0;
         p.head.rotation.x=active&&displayedLine?.emotion==='thoughtful' ? .12 : 0;
-        p.arms[0].rotation.x=talking?-.25+Math.sin(t*3)*.15:0;
+        p.arms[0].rotation.x=pose.moving&&!paused?Math.sin(p.elapsed*11)*.3:talking?-.25+Math.sin(t*3)*.15:0;
+        if(p.heldMug.visible)p.arms[1].rotation.x=-.7;
+        else if(p.marker.visible)p.arms[1].rotation.x=-1.1;
+        else p.arms[1].rotation.x=pose.moving&&!paused?-Math.sin(p.elapsed*11)*.3:0;
         p.arms[1].rotation.z=active&&displayedLine?.emotion==='tense'?-.25:0;
         p.mouth.scale.y=talking?1.3+Math.sin(t*9)*.65:1;
       }else{p.body.position.y=0;p.head.rotation.set(0,0,0);p.arms.forEach(a=>a.rotation.set(0,0,0));p.mouth.scale.y=1;}

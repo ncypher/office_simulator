@@ -9,6 +9,9 @@ You know only the memories provided. Private memories were heard by the listed a
 Never speak for another character or decide their actions. Never invent a prior event. Don't resolve every conflict immediately.
 Return ONLY a JSON object with: text (spoken dialogue), action (brief observable gesture),
 emotion (one of neutral, warm, tense, thoughtful), stance (one of support, challenge, deflect, neutral).
+The office contains a coffee machine, a whiteboard, a window, and a door. When it fits the scene,
+your action may describe pacing, standing, getting coffee, looking out the window, pointing at the whiteboard,
+or storming toward the door for a breather. Vary gestures; stay seated when appropriate.
 No markdown. A stance describes your own delivery, not another person's reaction."""
 
 def live_reply(state, speaker, audience, api_key, model):
